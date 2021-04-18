@@ -1,0 +1,35 @@
+---
+title: "Store XML in a Database"
+author: "Yash Kothari, Sanyam Harne"
+output: html_document
+---
+
+## Importing required libraries
+```{r}
+library(XML)
+library(RSQLite)
+```
+
+## Setting up Connection to DB and Parsing XML
+```{r}
+path <- "/home/yashk/Documents/DBMS-Workspace/DBMS-Practicum-2/"
+fn <- "pubmed_sample.xml"
+fpn = paste0(path, fn)
+
+# Reading the XML file and parse into DOM
+xmlDOM <- xmlParse(file = fpn)
+root <- xmlRoot(xmlDOM)
+
+dbfile = "courseDB.sqlite"
+
+# if database file already exists, we connect to it, otherwise
+# we create a new database
+dbcon <- dbConnect(RSQLite::SQLite(), paste0(path,dbfile))
+```
+
+## Closing connection to database and freeing the pointer to the parsed XML
+```{r}
+free(xmlDOM)
+dbDisconnect(dbcon)
+```
+
