@@ -9,13 +9,15 @@ output: html_document
 
 ## Importing required libraries
 ```{r}
-library(XML)
-library(RSQLite)
+library(xml2)
 library(dplyr)
+library(RSQLite)
+library(XML)
 ```
 
 ## Setting up Connection to Database and Parsing XML
 ```{r}
+#path<- "/Users/sanyamharne/Desktop/practicum2/"
 path <- "/home/yashk/Documents/DBMS-Workspace/DBMS-Practicum-2/"
 fn <- "pubmed_sample.xml"
 fpn = paste0(path, fn)
@@ -23,7 +25,7 @@ fpn = paste0(path, fn)
 # Reading the XML file and parse into DOM
 xmlDOM <- xmlParse(file = fpn)
 root <- xmlRoot(xmlDOM)
-#a <- read_xml(fpn)
+a <- read_xml(fpn)
 #xml_structure(a)
 dbfile = "Parcticum2.sqlite"
 
@@ -173,6 +175,7 @@ CREATE TABLE IF  NOT EXISTS ArticleHistory(
 );
 ```
 
+
 #extracting the Journal table from XML
 ```{r}
 xpathEx1<- "//Journal/ISSN"
@@ -200,7 +203,7 @@ month <-xmlSApply(node, function(x)xmlValue(x[['Month']]))
 day<-xmlSApply(node, function(x)xmlValue(x[['Day']]))
 medlinedate <- xmlSApply(node, function(x)xmlValue(x[['MedlineDate']]))
 n<- length(year)
-pub_date <- c(1:n)
+pub_date<-c(1:n)
 for (m in 1:n) {
   if(is.na(year[m])){
     pub_date[m]<-medlinedate[m]
@@ -216,6 +219,7 @@ for (m in 1:n) {
     }
   }
 }
+
 journal$pub_date<-pub_date
 #Extracting title and iso_abbr
 xpathEx2 <-"//Journal"
@@ -241,7 +245,6 @@ Author <- data.frame(author_id = author_id,
                     initials = initials,
                     affiliation = affiliation,
                     stringsAsFactors = F)
-Author
 a <- Author[!is.na(Author$affiliation),]
 b <- a[!duplicated(a[, 2:3]),]
 Author <- unique(Author[,1:4])
@@ -252,6 +255,7 @@ for(i in 1:nrow(b)){
   a = b[i,]$fore_name
   Author$affiliation[Author$fore_name == a & Author$last_name == b[i,]$last_name] <- b[i,]$c
 }
+Author
 ```
 
 ## Extracting the Article table from the XML
@@ -281,23 +285,173 @@ Article <- data.frame(pmid = pmid,
 Article
 ```
 
-## Extracting the Elocation table from the XML
+#extracting Eloaction table from XML
 ```{r}
-node <- xpathApply(root, "//Article")
-e_id <- xmlSApply(node, function(x)xmlValue(x[['ELocationID']]))
-e_
-xpath <- "//Article/ELocationID[@EIdType]"
-e_type <- xpathSApply(root,xpath,xmlGetAttr,"EIdType")
-
-Elocation <- data.frame(e_id = e_id,
-                        e_type = e_type,
-                        stringsAsFactors = F)
-Elocation
+xpathEx1 <- "//Article/ELocationID"
+elocation<- data.frame(xpathSApply(root,xpathEx1,xmlValue)) 
+xpathEx1 <- "//Article/ELocationID[@EIdType]"
+e_type<- xpathSApply(root,xpathEx1,xmlGetAttr, "EIdType")
+names(elocation)[1]<-"e_id"
+elocation$e_type<-e_type
+elocation
 
 ```
+
+#extracting AbstractText table from XML
+```{r}
+#Node by Node traversal to get the correct artile id for the abstract text
+xpathEx1<-"//MedlineCitation/PMID"
+pmid<-xpathSApply(root,xpathEx1,xmlValue)
+
+xpath<-"//Abstract/AbstractText"
+abstract_text<-data.frame(xpathSApply(root,xpath,xmlValue))
+names(abstract_text)[1]<-"abs_text"
+
+m=1
+for(k in 1:19){
+  a<-pmid[k]
+  xpath<- sprintf("//MedlineCitation[PMID= %s]//Abstract/AbstractText", a)
+  txt<-xpathSApply(root,xpath,xmlValue)
+  
+  xpath<- sprintf("//MedlineCitation[PMID= %s]//Abstract/AbstractText[@Label]", a)
+  label<-xpathSApply(root,xpath,xmlGetAttr,"Label")
+  
+  xpath<- sprintf("//MedlineCitation[PMID= %s]//Abstract/AbstractText[@NlmCategory]", a)
+  nlmcategory<-xpathSApply(root,xpath,xmlGetAttr,"NlmCategory")
+  if(length(txt)==1){
+      abstract_text$label[m]=NA
+      abstract_text$nlmcategory[m]=NA
+      m=m+1
+  }
+  else{
+    c=1 
+    while(c<=length(txt)){
+      abstract_text$pmid[m]<-pmid[k]
+      abstract_text$label[m]<-label[c]
+      abstract_text$nlmcategory[m]<- nlmcategory[c]
+      #abstract_text$abs_text[m]<- txt[c]
+      m=m+1
+      c=c+1
+    }
+    
+  }
+}
+abstract_text
+```
+
+## Extracting ArticleHistory table from the XML
+```{r}
+#Node by Node traversal to get the correct artile id for the abstract text
+xpathEx1<-"//MedlineCitation/PMID"
+pmid<-xpathSApply(root,xpathEx1,xmlValue)
+
+xpath<-"//History/PubMedPubDate[@PubStatus]"
+status <- xpathSApply(root,xpath,xmlGetAttr,"PubStatus")
+xpath<-"//History/PubMedPubDate"
+pub_date <- xpathSApply(root,xpath,xmlValue)
+ArticleHistory<-data.frame(status = status,
+                           pub_date = pub_date,
+                           stringsAsFactors = F)
+ArticleHistory$pmid <- c(1:length(ArticleHistory$status))
+m=1
+for(k in 1:length(pmid)){
+  a <- pmid[k]
+  xpath <- sprintf("//PubmedArticle[MedlineCitation/PMID= %s]//History/PubMedPubDate[@PubStatus]", a)
+  status <- xpathSApply(root,xpath,xmlGetAttr, "PubStatus")
+  status
+  c=1
+  while(c<=length(status)){
+    ArticleHistory$pmid[m] <- pmid[k]
+    m=m+1
+    c=c+1
+  }
+}
+ArticleHistory
+```
+
+# Extracting the ArticleAuthor
+```{r}
+xpathEx1 = "//AuthorList/Author/LastName"
+last_name <- xpathSApply(root, xpathEx1, xmlValue)
+xpathEx1 = "//AuthorList/Author/ForeName "
+fore_name <- xpathSApply(root, xpathEx1, xmlValue)
+article_authors<- data.frame(last_name = last_name,
+                             fore_name = fore_name,
+                             stringsAsFactors = F)
+
+#Node by Node traversal to get the correct artile id for the abstract text
+xpathEx1<-"//MedlineCitation/PMID"
+pmid<-xpathSApply(root,xpathEx1,xmlValue)
+article_authors$pmid <- c(1:length(article_authors$last_name))
+m = 1
+for(k in 1:length(article_authors$last_name)){
+  a<-pmid[k]
+  xpath<- sprintf("//MedlineCitation[PMID= %s]//Author/LastName", a)
+  auth<-xpathSApply(root,xpath,xmlValue)
+  c = 1
+  while(c<=length(auth)){
+    article_authors$pmid[m] <- pmid[k]
+    m=m+1
+    c=c+1
+  }
+}
+article_authors
+inner_join(Author, article_authors, by = c("last_name", "fore_name")) %>% select(pmid, author_id)
+```
+
+#Extracting ArticleElocation
+```{r}
+xpathEx1 = "//ELocationID"
+e_id <- xpathSApply(root, xpathEx1, xmlValue)
+ArticleElocation <- data.frame(e_id = e_id, stringsAsFactors = F)
+
+#Node by Node traversal to get the correct artile id for the abstract text
+xpathEx1<-"//MedlineCitation/PMID"
+pmid<-xpathSApply(root,xpathEx1,xmlValue)
+ArticleElocation$pmid <- c(1:length(ArticleElocation$e_id))
+m = 1
+for(k in 1:length(ArticleElocation$e_id)){
+  a<-pmid[k]
+  xpath<- sprintf("//MedlineCitation[PMID= %s]/Article/ELocationID", a)
+  e_id<-xpathSApply(root,xpath,xmlValue)
+  c = 1
+  if(length(e_id)==1){
+    ArticleElocation$pmid[m] <- pmid[k]
+    m=m+1
+    c=c+1
+  }
+  else{
+     while(c<=length(e_id)){
+      ArticleElocation$pmid[m] <- pmid[k]
+      m=m+1
+      c=c+1
+    }
+  }
+ 
+}
+ArticleElocation
+```
+
+```{r}
+```
+
+```{sql connection=dbcon}
+
+```
+```{sql connection=dbcon}
+
+```
+```{sql connection=dbcon}
+
+```
+```{sql connection=dbcon}
+
+```
+
 
 ## Closing connection to database and freeing the pointer to the parsed XML
 ```{r}
 free(xmlDOM)
 dbDisconnect(dbcon)
 ```
+
