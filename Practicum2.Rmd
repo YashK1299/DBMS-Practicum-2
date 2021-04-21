@@ -5,7 +5,7 @@ output: html_document
 ---
 
 ## ERD
-![ERD](Practicum2-ERD.jpeg)
+![ERD](ERD1.jpeg)
 
 ## Importing required libraries
 ```{r}
