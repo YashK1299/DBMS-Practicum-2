@@ -104,7 +104,7 @@ FOREIGN KEY(journal_id) REFERENCES Journal(journal_id)
 
 ## Creating Elocation Table
 ```{sql connection=dbcon}
-CREATE TABLE IF NOT ExISTS Elocation(
+CREATE TABLE IF NOT EXISTS Elocation(
 e_id TEXT,
 e_type TEXT,
 PRIMARY KEY(e_id)
@@ -262,7 +262,16 @@ node <- xpathApply(root, "//Article/Pagination")
 pagination <- xmlSApply(node, function(x)xmlValue(x[['MedlinePgn']]))
 node <- xpathApply(root, "//Article")
 language <- xmlSApply(node, function(x)xmlValue(x[['Language']]))
+
+#extracting date in the proper format
+
+
 article_date <- xmlSApply(node, function(x)xmlValue(x[['ArticleDate']]))
+year<- substr(article_date,1,4)
+month<-substr(article_date,5,6)
+day<- substr(article_date,7,8)
+article_date <- paste(year,month,day,sep = "-")
+article_date[article_date == "NA-NA-NA"] <- NA
 node <- xpathApply(root, "//Article/Journal")
 journalid <- xmlSApply(node, function(x)xmlValue(x[['ISSN']]))
 node <- xpathApply(root, "//Article/Journal/JournalIssue")
@@ -281,10 +290,9 @@ Article <- data.frame(pmid = pmid,
                       journal_volume = journal_volume,
                       journal_issue = journal_issue,
                       stringsAsFactors = F)
-Article
-Journal
 Article <- inner_join(Article, Journal, by = c("issn", "journal_volume", "journal_issue")) %>% select(!c(issn, journal_issue, journal_volume, issn_type))
 Article <- Article %>% select(!c(cited_medium, pub_date, title.y, iso_abbr))
+Article
 ```
 
 ## Extracting Eloaction table from XML
@@ -293,7 +301,7 @@ xpathEx1 <- "//Article/ELocationID"
 Elocation<- data.frame(xpathSApply(root,xpathEx1,xmlValue)) 
 xpathEx1 <- "//Article/ELocationID[@EIdType]"
 e_type<- xpathSApply(root,xpathEx1,xmlGetAttr, "EIdType")
-names(elocation)[1]<-"e_id"
+names(Elocation)[1]<-"e_id"
 Elocation$e_type<-e_type
 Elocation
 ```
@@ -345,8 +353,16 @@ xpathEx1<-"//MedlineCitation/PMID"
 pmid<-xpathSApply(root,xpathEx1,xmlValue)
 xpath<-"//History/PubMedPubDate[@PubStatus]"
 status <- xpathSApply(root,xpath,xmlGetAttr,"PubStatus")
-xpath<-"//History/PubMedPubDate"
-pub_date <- xpathSApply(root,xpath,xmlValue)
+#Extracting date in the proper format
+xpathEx2 <-"//History/PubMedPubDate"
+node<-xpathApply(root,xpathEx2)
+
+
+year <- xmlSApply(node, function(x)xmlValue(x[['Year']]))
+month <-xmlSApply(node, function(x)xmlValue(x[['Month']]))
+day<-xmlSApply(node, function(x)xmlValue(x[['Day']]))
+
+pub_date<- paste(year,month,day,sep = "-")
 ArticleHistory<-data.frame(status = status,
                            pub_date = pub_date,
                            stringsAsFactors = F)
@@ -431,31 +447,23 @@ ArticleElocation
 ## Populating Database
 ```{r}
 Journal <- Journal[, c(9, 1, 2, 3, 4, 5, 6, 7, 8)]
-Journal
 names(Journal) <- c("journal_id", "issn", "issn_type", "volume", "issue", "cited_medium", "pub_date", "title", "iso_abbr")
 dbWriteTable(dbcon, name = "Journal", value = Journal, append = TRUE,row.names=FALSE)
-Article
 names(Article) <- c("pmid", "title", "pagination", "language", "article_date", "pub_model", "journal_id")
 dbWriteTable(dbcon, name = "Article", value = Article, append = TRUE,row.names=FALSE)
 names(Elocation) <- c("e_id", "e_type")
-Elocation
 dbWriteTable(dbcon, name = "Elocation", value = Elocation, append = TRUE,row.names=FALSE)
 ArticleElocation <- ArticleElocation[, c(2, 1)]
 names(ArticleElocation) <- c("article_id", "e_id")
 dbWriteTable(dbcon, name = "ArticleElocation", value = ArticleElocation, append = TRUE,row.names=FALSE)
-AbstractText
 AbstractText <- AbstractText[, c(2, 3, 4, 1)]
 names(AbstractText) <- c("article_id", "label", "category", "abs_text")
-AbstractText
 dbWriteTable(dbcon, name = "AbstractText", value = AbstractText, append = TRUE,row.names=FALSE)
-Author
 dbWriteTable(dbcon, name = "Author", value = Author, append = TRUE,row.names=FALSE)
-ArticleAuthors
 names(ArticleAuthors) <- c("article_id", "author_id")
 dbWriteTable(dbcon, name = "ArticleAuthors", value = ArticleAuthors, append = TRUE,row.names=FALSE)
 ArticleHistory <- ArticleHistory[, c(3, 1, 2)]
 names(ArticleHistory) <- c("article_id", "status", "pub_date")
-ArticleHistory
 dbWriteTable(dbcon, name = "ArticleHistory", value = ArticleHistory, append = TRUE,row.names=FALSE)
 ```
 
